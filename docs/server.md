@@ -196,7 +196,7 @@ Accepts `multipart/form-data` (needed for the reference audio upload) or
 | `repetition_penalty` | float | model default | Repetition penalty. `0` keeps the model default. |
 | `split_chars` | int | `--split-chars` | Long text is split on sentence boundaries into pieces of about this size and generated one at a time. `0` generates in one pass. |
 | `max_new_tokens` | int | model default | Frame cap per piece, 12.5 frames per second. `0` uses the model default of 750. |
-| `format` | string | `pcm` | `pcm` for headerless PCM, or `wav` for a WAV file. |
+| `response_format` | string | `pcm` | `pcm` for headerless PCM, or `wav` for a WAV file. |
 
 Every sampling field treats `0` as "use the model default", so leaving them out
 behaves exactly as before rather than forcing a zero.
@@ -214,19 +214,19 @@ so leave splitting on unless you have a reason not to. Starting the server with
 
 | Header | Value |
 | --- | --- |
-| `Content-Type` | `audio/pcm`, or `audio/wav` when `format=wav` |
+| `Content-Type` | `audio/pcm`, or `audio/wav` when `response_format=wav` |
 | `Transfer-Encoding` | `chunked` |
 | `X-Sample-Rate` | `24000` |
 | `X-Sample-Format` | `s16le` |
 | `Cache-Control` | `no-store` |
 
-With the default `format=pcm` the body is **headerless** signed 16 bit little
-endian mono PCM, not a WAV file. With `format=wav` the body is a complete WAV
+With the default `response_format=pcm` the body is **headerless** signed 16 bit little
+endian mono PCM, not a WAV file. With `response_format=wav` the body is a complete WAV
 file, but since the WAV header needs the final byte count up front, the whole
 clip is generated and buffered before anything is sent, so streaming playback
 is lost.
 
-With `format=pcm`, chunks arrive roughly every 2 seconds of generated audio,
+With `response_format=pcm`, chunks arrive roughly every 2 seconds of generated audio,
 so playback can start long before generation finishes.
 
 ### Errors
@@ -261,7 +261,7 @@ curl -X POST http://127.0.0.1:8137/v1/audio/speech \
   --form-string "instruction=A warm, thoughtful young woman with a clear, calm delivery." \
   --form-string "cfg_scale=1" \
   --form-string "seed=42" \
-  --form-string "format=wav" \
+  --form-string "response_format=wav" \
   -o speech.wav
 ```
 
@@ -272,7 +272,7 @@ curl -X POST http://127.0.0.1:8137/v1/audio/speech \
   --form-string "input=It is good to hear your voice again." \
   -F "ref_audio=@reference.wav" \
   --form-string "ref_text=This is the exact transcript of the reference audio." \
-  --form-string "format=wav" \
+  --form-string "response_format=wav" \
   -o clone.wav
 ```
 
@@ -285,7 +285,7 @@ curl -X POST http://127.0.0.1:8137/v1/audio/speech \
   -F "ref_audio=@reference.wav" \
   --form-string "ref_text=This is the exact transcript of the reference audio." \
   --form-string "cfg_scale=1" \
-  --form-string "format=wav" \
+  --form-string "response_format=wav" \
   -o direction.wav
 ```
 
@@ -296,7 +296,7 @@ curl -sN -X POST http://127.0.0.1:8137/v1/audio/speech --form-string "input=Hell
   | ffplay -f s16le -ar 24000 -ac 1 -nodisp -autoexit -
 ```
 
-Convert PCM to WAV yourself, or just ask for `format=wav` in the request instead:
+Convert PCM to WAV yourself, or just ask for `response_format=wav` in the request instead:
 
 ```
 ffmpeg -f s16le -ar 24000 -ac 1 -i speech.pcm speech.wav

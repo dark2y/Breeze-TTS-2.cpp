@@ -212,20 +212,26 @@ static bool handshake(SOCKET s, const std::string & token) {
     }
 
     const size_t line_end = req.find("\r\n");
+    // the request line is "GET /path?query HTTP/1.1", so the query ends at the space before
+    // the version, not at the end of the line
+    const size_t uri_end = line_end == std::string::npos ? std::string::npos : req.find(' ', 4);
     const size_t qmark = req.find('?');
     bool token_ok = false;
-    if (qmark != std::string::npos && line_end != std::string::npos && qmark < line_end) {
-        const std::string query = req.substr(qmark + 1, line_end - qmark - 1);
+    std::string got;
+    if (qmark != std::string::npos && uri_end != std::string::npos && qmark < uri_end) {
+        const std::string query = req.substr(qmark + 1, uri_end - qmark - 1);
         const std::string pat = "token=";
         const size_t at = query.find(pat);
         if (at != std::string::npos) {
             const size_t end = query.find('&', at);
-            const std::string got = query.substr(at + pat.size(),
+            got = query.substr(at + pat.size(),
                 end == std::string::npos ? std::string::npos : end - at - pat.size());
             token_ok = !token.empty() && got == token;
         }
     }
     if (!token_ok) {
+        fprintf(stderr, "ws: rejected, token mismatch (expected \"%s\", got \"%s\")\n",
+                token.c_str(), got.c_str());
         const std::string res = "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n";
         ::send(s, res.data(), (int) res.size(), 0);
         return false;

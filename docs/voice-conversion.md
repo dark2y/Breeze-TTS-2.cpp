@@ -69,29 +69,31 @@ Same operation over HTTP. Takes `multipart/form-data`.
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `source` | file | required | Recording to convert. |
-| `ref_audio` | file | required unless `voice_id` | Target voice WAV. |
-| `ref_text` | string | required unless `voice_id` | Exact transcript of the reference. |
-| `voice_id` | string | none | Saved or cached voice to use instead of uploading one. |
-| `text` | string | filler | Transcript of the source, if known. |
+| `ref_audio` | file | required unless `voice` | Target voice WAV. |
+| `ref_text` | string | required unless `voice` | Exact transcript of the reference. |
+| `voice` | string | none | Saved or cached voice to use instead of uploading one. |
+| `input` | string | filler | Transcript of the source, if known. |
 | `temperature` | float | `0.3` | Depth sampling temperature. |
 | `top_k` | int | `1` | Depth top-k. |
 | `cfg_scale` | float | `1.0` | Guidance toward the target voice. |
 | `keep_acoustic` | int | `0` | Acoustic codebooks kept from the source. |
 | `seed` | int | `42` | RNG seed. |
+| `format` | string | `pcm` | `pcm` for headerless PCM, or `wav` for a WAV file. |
 
 Unlike `/v1/audio/speech` this returns the whole clip in one response rather than
 streaming, because conversion needs the entire source encoded before it can
-start. Headers are the same: `X-Sample-Rate` and `X-Sample-Format`, raw s16le
-PCM in the body.
+start. Headers are the same: `X-Sample-Rate` and `X-Sample-Format`. The body is
+raw s16le PCM by default, or a complete WAV file when `format=wav`.
 
 ```
 curl -X POST http://127.0.0.1:8137/v1/audio/convert \
   -F "source=@recording.wav" \
-  --form-string "voice_id=harbour" \
-  -o converted.pcm
+  --form-string "voice=harbour" \
+  --form-string "format=wav" \
+  -o converted.wav
 ```
 
-Note the asymmetry: the HTTP endpoint accepts a saved `voice_id`, but
+Note the asymmetry: the HTTP endpoint accepts a saved `voice`, but
 `breeze-convert` only takes a clip with `--ref-audio`. Converting from the
 command line always re-encodes the reference.
 

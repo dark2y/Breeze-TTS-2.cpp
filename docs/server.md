@@ -78,7 +78,7 @@ Measure it against your own hardware rather than assuming:
 
 ```
 curl -s -o out.pcm -w "%{time_total}\n" \
-  --form-string "text=<a sentence long enough to take several seconds>" \
+  --form-string "input=<a sentence long enough to take several seconds>" \
   http://127.0.0.1:8137/v1/audio/speech
 ```
 
@@ -183,11 +183,11 @@ Accepts `multipart/form-data` (needed for the reference audio upload) or
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `text` | string | required | Text to speak, UTF-8. |
+| `input` | string | required | Text to speak, UTF-8. |
 | `instruction` | string | `Speak clearly and naturally.` | Voice description or delivery direction. |
 | `ref_audio` | file | none | Reference WAV for cloning. Any sample rate or channel count; resampled to mono at the model rate. |
 | `ref_text` | string | empty | Exact transcript of `ref_audio`. Required whenever `ref_audio` is present. |
-| `voice_id` | string | none | A saved or cached voice to clone instead of uploading a clip. Skips the reference encode. See [voices.md](voices.md). |
+| `voice` | string | none | A saved or cached voice to clone instead of uploading a clip. Skips the reference encode. See [voices.md](voices.md). |
 | `cfg_scale` | float | `1.0` | Classifier free guidance. `1.0` disables it. |
 | `seed` | int | `42` | RNG seed. |
 | `temperature` | float | model default | Sampling temperature. `0` keeps whatever the GGUF was built with. |
@@ -196,11 +196,12 @@ Accepts `multipart/form-data` (needed for the reference audio upload) or
 | `repetition_penalty` | float | model default | Repetition penalty. `0` keeps the model default. |
 | `split_chars` | int | `--split-chars` | Long text is split on sentence boundaries into pieces of about this size and generated one at a time. `0` generates in one pass. |
 | `max_new_tokens` | int | model default | Frame cap per piece, 12.5 frames per second. `0` uses the model default of 750. |
+| `format` | string | `pcm` | `pcm` for headerless PCM, or `wav` for a WAV file. |
 
 Every sampling field treats `0` as "use the model default", so leaving them out
 behaves exactly as before rather than forcing a zero.
 
-There is no length limit on `text`. Anything past the budget is split and
+There is no length limit on `input`. Anything past the budget is split and
 generated piece by piece, each conditioned on the first so the voice does not
 change partway. Generating minutes in a single pass is what `split_chars 0`
 does, and the model loses track of the text well before it runs out of frames,
@@ -213,25 +214,27 @@ so leave splitting on unless you have a reason not to. Starting the server with
 
 | Header | Value |
 | --- | --- |
-| `Content-Type` | `audio/pcm` |
+| `Content-Type` | `audio/pcm`, or `audio/wav` when `format=wav` |
 | `Transfer-Encoding` | `chunked` |
 | `X-Sample-Rate` | `24000` |
 | `X-Sample-Format` | `s16le` |
 | `Cache-Control` | `no-store` |
 
-The body is **headerless** signed 16 bit little endian mono PCM. It is not a
-WAV file. Wrap it yourself if you need one, or use the CLI which writes WAV
-directly.
+With the default `format=pcm` the body is **headerless** signed 16 bit little
+endian mono PCM, not a WAV file. With `format=wav` the body is a complete WAV
+file, but since the WAV header needs the final byte count up front, the whole
+clip is generated and buffered before anything is sent, so streaming playback
+is lost.
 
-Chunks arrive roughly every 2 seconds of generated audio, so playback can start
-long before generation finishes.
+With `format=pcm`, chunks arrive roughly every 2 seconds of generated audio,
+so playback can start long before generation finishes.
 
 ### Errors
 
 | Status | Body | Cause |
 | --- | --- | --- |
-| `400` | `{"error":"text is required"}` | `text` missing or empty. |
-| `404` | `{"error":"unknown voice_id"}` | No cached or saved voice by that name. |
+| `400` | `{"error":"text is required"}` | `input` missing or empty. |
+| `404` | `{"error":"unknown voice"}` | No cached or saved voice by that name. |
 | `409` | `{"error":"busy"}` | Another generation is already running. |
 
 The server holds one model and serves one request at a time. A second
@@ -247,50 +250,53 @@ treat a truncated body as an error.
 ### Examples
 
 Send text fields with `--form-string`, not `-F`. `curl` reads a value that starts
-with `(` as the opening of a multipart group, so `-F "text=(sigh) ..."` posts an
+with `(` as the opening of a multipart group, so `-F "input=(sigh) ..."` posts an
 empty field and the model ends up reading the multipart boundary out loud.
 
 Voice design:
 
 ```
 curl -X POST http://127.0.0.1:8137/v1/audio/speech \
-  --form-string "text=Welcome aboard. Your journey begins now." \
+  --form-string "input=Welcome aboard. Your journey begins now." \
   --form-string "instruction=A warm, thoughtful young woman with a clear, calm delivery." \
   --form-string "cfg_scale=1" \
   --form-string "seed=42" \
-  -o speech.pcm
+  --form-string "format=wav" \
+  -o speech.wav
 ```
 
 Voice clone:
 
 ```
 curl -X POST http://127.0.0.1:8137/v1/audio/speech \
-  --form-string "text=It is good to hear your voice again." \
+  --form-string "input=It is good to hear your voice again." \
   -F "ref_audio=@reference.wav" \
   --form-string "ref_text=This is the exact transcript of the reference audio." \
-  -o clone.pcm
+  --form-string "format=wav" \
+  -o clone.wav
 ```
 
 Voice direction, which is a clone plus an instruction:
 
 ```
 curl -X POST http://127.0.0.1:8137/v1/audio/speech \
-  --form-string "text=We need to discuss what happened last night." \
+  --form-string "input=We need to discuss what happened last night." \
   --form-string "instruction=Speak slowly with a restrained, serious tone." \
   -F "ref_audio=@reference.wav" \
   --form-string "ref_text=This is the exact transcript of the reference audio." \
   --form-string "cfg_scale=1" \
-  -o direction.pcm
+  --form-string "format=wav" \
+  -o direction.wav
 ```
 
 Play the raw stream straight out of `curl`:
 
 ```
-curl -sN -X POST http://127.0.0.1:8137/v1/audio/speech --form-string "text=Hello there." \
+curl -sN -X POST http://127.0.0.1:8137/v1/audio/speech --form-string "input=Hello there." \
   | ffplay -f s16le -ar 24000 -ac 1 -nodisp -autoexit -
 ```
 
-Convert to WAV:
+Convert PCM to WAV yourself, or just ask for `format=wav` in the request instead:
 
 ```
 ffmpeg -f s16le -ar 24000 -ac 1 -i speech.pcm speech.wav
@@ -302,7 +308,7 @@ ffmpeg -f s16le -ar 24000 -ac 1 -i speech.pcm speech.wav
 import struct
 import urllib.request
 
-body, boundary = build_multipart({"text": "Streaming from python."})
+body, boundary = build_multipart({"input": "Streaming from python."})
 req = urllib.request.Request(
     "http://127.0.0.1:8137/v1/audio/speech",
     data=body,

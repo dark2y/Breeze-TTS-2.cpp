@@ -7,6 +7,7 @@ const streamToggle = document.getElementById("stream");
 const bufferInput = document.getElementById("buffer");
 const bufferOut = document.getElementById("bufval");
 const stopBtn = document.getElementById("stop");
+
 let wsPort = 0;
 
 function syncBuffer() {
@@ -258,7 +259,7 @@ function wsGenerate(panel, tabName) {
 
   return resolveVoice(f).then(voice => new Promise(resolve => {
     const url = (location.protocol === "https:" ? "wss://" : "ws://") +
-                location.hostname + ":" + wsPort;
+                location.hostname + "/ws";
     const sock = new WebSocket(url);
     sock.binaryType = "arraybuffer";
     liveSocket = sock;
@@ -339,13 +340,13 @@ async function generate(panel, tabName) {
   if (!text) { statusEl.textContent = "TEXT IS REQUIRED"; return; }
 
   const form = new FormData();
-  form.append("text", text);
+  form.append("input", text);
   form.append("seed", f.seed ? f.seed.value : "42");
   form.append("cfg_scale", f.cfg ? f.cfg.value : "1.0");
   form.append("instruction", f.instruction ? (f.instruction.value || "Speak clearly and naturally.")
                                            : "Speak clearly and naturally.");
   if (f.ref_text) form.append("ref_text", f.ref_text.value || "");
-  if (f.voice_id && f.voice_id.value) form.append("voice_id", f.voice_id.value);
+  if (f.voice_id && f.voice_id.value) form.append("voice", f.voice_id.value);
   else if (f.ref_audio && f.ref_audio.files.length) form.append("ref_audio", f.ref_audio.files[0]);
 
   const streaming = streamToggle.checked;
@@ -402,12 +403,12 @@ async function convert(panel) {
   }
   const form = new FormData();
   form.append("source", f.source.files[0]);
-  if (voice) form.append("voice_id", voice);
+  if (voice) form.append("voice", voice);
   else {
     form.append("ref_audio", f.ref_audio.files[0]);
     form.append("ref_text", f.ref_text.value);
   }
-  form.append("text", (f.text.value || "").trim());
+  form.append("input", (f.text.value || "").trim());
   form.append("keep_acoustic", f.keep_acoustic.value);
   form.append("seed", f.seed.value);
 

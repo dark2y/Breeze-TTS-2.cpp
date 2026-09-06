@@ -89,8 +89,10 @@ void VoiceStore::add_routes(httplib::Server & svr, BreezeModel & model, MimiCode
     const int spf = model.cfg.samples_per_frame;
 
     svr.Post("/v1/voices", [&, sr, spf, dir](const httplib::Request & req, httplib::Response & res) {
+        
         const std::string text = field(req, "ref_text", "");
         const std::string name = field(req, "name", "");
+
         if (!req.has_file("ref_audio") || text.empty())
             return fail(res, 400, "ref_audio and ref_text are required");
         if (!name.empty() && !valid_voice_name(name))

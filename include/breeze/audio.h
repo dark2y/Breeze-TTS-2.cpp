@@ -18,6 +18,9 @@ bool write_wav(const std::string & path, const std::vector<float> & samples, int
 // float samples in [-1, 1] to signed 16-bit little-endian bytes
 std::vector<uint8_t> to_pcm16(const float * samples, int n);
 
+// wraps 16-bit PCM mono samples in a WAV (RIFF) header
+std::vector<uint8_t> wav_bytes(const std::vector<uint8_t> & pcm, int sr);
+
 std::vector<float> resample_linear(const std::vector<float> & in, int in_sr, int out_sr);
 
 }

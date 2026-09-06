@@ -69,9 +69,10 @@ breeze-cli model.gguf --voice harbour --text "It is good to hear your voice agai
 
 ```
 curl -X POST http://127.0.0.1:8137/v1/audio/speech \
-  --form-string "text=It is good to hear your voice again." \
-  --form-string "voice_id=harbour" \
-  -o clone.pcm
+  --form-string "input=It is good to hear your voice again." \
+  --form-string "voice=harbour" \
+  --form-string "format=wav" \
+  -o clone.wav
 ```
 
 The transcript travels with the voice, so `ref_text` is not needed. Sending one

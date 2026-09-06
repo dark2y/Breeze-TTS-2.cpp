@@ -91,7 +91,7 @@ int run_server(const ServerOptions & opts) {
             return;
         }
         GenRequest g;
-        g.text = field(req, "text", "");
+        g.text = field(req, "input", "");
         g.instruction = field(req, "instruction", "Speak clearly and naturally.");
         g.ref_text = field(req, "ref_text", "");
         g.cfg_scale = (float) atof(field(req, "cfg_scale", "1.0").c_str());
@@ -109,15 +109,21 @@ int run_server(const ServerOptions & opts) {
             if (!f.content.empty())
                 read_wav_buffer((const uint8_t *) f.content.data(), f.content.size(), sr, g.ref_audio);
         }
-        const std::string vid = field(req, "voice_id", "");
+        const std::string vid = field(req, "voice", "");
         if (!vid.empty() && !store.take(vid, g.ref_codes, g.ref_frames, g.ref_text)) {
             res.status = 404;
-            res.set_content("{\"error\":\"unknown voice_id\"}", "application/json");
+            res.set_content("{\"error\":\"unknown voice\"}", "application/json");
             return;
         }
         if (g.text.empty()) {
             res.status = 400;
             res.set_content("{\"error\":\"text is required\"}", "application/json");
+            return;
+        }
+        const std::string format = field(req, "format", "pcm");
+        if (format != "pcm" && format != "wav") {
+            res.status = 400;
+            res.set_content("{\"error\":\"format must be pcm or wav\"}", "application/json");
             return;
         }
 
@@ -130,9 +136,10 @@ int run_server(const ServerOptions & opts) {
         printf("gen  %s, %d chars, cfg %.1f, seed %d\n", mode, (int) g.text.size(), g.cfg_scale, g.seed);
         fflush(stdout);
 
+        // wav needs the final byte count up front, so it can't be streamed chunk by chunk like raw pcm
         res.set_chunked_content_provider(
-            "audio/pcm",
-            [&model, &codec, g, lock, sr, verbose = opts.verbose](size_t, httplib::DataSink & sink) {
+            format == "wav" ? "audio/wav" : "audio/pcm",
+            [&model, &codec, g, lock, sr, verbose = opts.verbose, format](size_t, httplib::DataSink & sink) {
                 GenTimings tm;
                 const auto t0 = std::chrono::steady_clock::now();
                 const auto elapsed = [&] {
@@ -141,10 +148,16 @@ int run_server(const ServerOptions & opts) {
                 // the model decides when to stop, so the total is only ever an estimate
                 const double est = estimate_seconds(g.text);
                 size_t total = 0;
+                // wav needs a header with the final byte count, so buffer instead of streaming chunks
+                std::vector<uint8_t> wav_pcm;
                 try {
                     generate(model, codec, g, [&](const float * s, int n) {
                         std::vector<uint8_t> pcm = to_pcm16(s, n);
-                        if (!sink.write((const char *) pcm.data(), pcm.size())) return false;
+                        if (format == "wav") {
+                            wav_pcm.insert(wav_pcm.end(), pcm.begin(), pcm.end());
+                        } else if (!sink.write((const char *) pcm.data(), pcm.size())) {
+                            return false;
+                        }
                         total += (size_t) n;
                         const double secs = (double) total / sr, wall = elapsed();
                         const double rate = wall > 0 ? secs / wall : 0;
@@ -158,6 +171,10 @@ int run_server(const ServerOptions & opts) {
                     }, &tm);
                 } catch (const std::exception & e) {
                     fprintf(stderr, "\ngeneration error: %s\n", e.what());
+                }
+                if (format == "wav") {
+                    std::vector<uint8_t> wav = wav_bytes(wav_pcm, sr);
+                    sink.write((const char *) wav.data(), wav.size());
                 }
                 const double secs = (double) total / sr, wall = elapsed();
                 printf("\r%3.0f%%|%s| %.1f/%.1fs [%s, %.1f fps, %.2fx]        \n",
@@ -199,21 +216,27 @@ int run_server(const ServerOptions & opts) {
         std::string ref_text = field(req, "ref_text", "");
         std::vector<int> vcodes;
         int vframes = 0;
-        const std::string vid = field(req, "voice_id", "");
+        const std::string vid = field(req, "voice", "");
         if (!vid.empty()) {
             if (!store.take(vid, vcodes, vframes, ref_text)) {
                 res.status = 404;
-                res.set_content("{\"error\":\"unknown voice_id\"}", "application/json");
+                res.set_content("{\"error\":\"unknown voice\"}", "application/json");
                 return;
             }
         } else if (!load("ref_audio", ref)) {
             res.status = 400;
-            res.set_content("{\"error\":\"ref_audio or voice_id is required\"}", "application/json");
+            res.set_content("{\"error\":\"ref_audio or voice is required\"}", "application/json");
             return;
         }
         if (ref_text.empty()) {
             res.status = 400;
             res.set_content("{\"error\":\"ref_text is required\"}", "application/json");
+            return;
+        }
+        const std::string format = field(req, "format", "pcm");
+        if (format != "pcm" && format != "wav") {
+            res.status = 400;
+            res.set_content("{\"error\":\"format must be pcm or wav\"}", "application/json");
             return;
         }
 
@@ -224,7 +247,7 @@ int run_server(const ServerOptions & opts) {
             int T = 0;
             std::vector<int> codes = codec.encode(src, T);
             ConvertOptions copt;
-            copt.src_text = field(req, "text", "");
+            copt.src_text = field(req, "input", "");
             copt.temperature = (float) atof(field(req, "temperature", "0.3").c_str());
             copt.top_k = atoi(field(req, "top_k", "1").c_str());
             copt.cfg_scale = (float) atof(field(req, "cfg_scale", "1.0").c_str());
@@ -241,7 +264,12 @@ int run_server(const ServerOptions & opts) {
             std::vector<uint8_t> pcm = to_pcm16(audio.data(), (int) audio.size());
             res.set_header("X-Sample-Rate", std::to_string(sr));
             res.set_header("X-Sample-Format", "s16le");
-            res.set_content((const char *) pcm.data(), pcm.size(), "audio/pcm");
+            if (format == "wav") {
+                std::vector<uint8_t> wav = wav_bytes(pcm, sr);
+                res.set_content((const char *) wav.data(), wav.size(), "audio/wav");
+            } else {
+                res.set_content((const char *) pcm.data(), pcm.size(), "audio/pcm");
+            }
         } catch (const std::exception & e) {
             fprintf(stderr, "conversion error: %s\n", e.what());
             res.status = 500;

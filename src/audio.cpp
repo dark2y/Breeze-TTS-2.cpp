@@ -90,18 +90,27 @@ std::vector<uint8_t> to_pcm16(const float * s, int n) {
     return out;
 }
 
+std::vector<uint8_t> wav_bytes(const std::vector<uint8_t> & pcm, int sr) {
+    uint32_t data_len = (uint32_t) pcm.size();
+    uint32_t riff = 36 + data_len;
+    std::vector<uint8_t> out;
+    out.reserve(44 + pcm.size());
+    auto w32 = [&](uint32_t v) { for (int i = 0; i < 4; i++) out.push_back((uint8_t) (v >> (i * 8))); };
+    auto w16 = [&](uint16_t v) { for (int i = 0; i < 2; i++) out.push_back((uint8_t) (v >> (i * 8))); };
+    auto tag = [&](const char * s) { out.insert(out.end(), s, s + 4); };
+    tag("RIFF"); w32(riff); tag("WAVE");
+    tag("fmt "); w32(16); w16(1); w16(1); w32(sr); w32(sr * 2); w16(2); w16(16);
+    tag("data"); w32(data_len);
+    out.insert(out.end(), pcm.begin(), pcm.end());
+    return out;
+}
+
 bool write_wav(const std::string & path, const std::vector<float> & samples, int sr) {
     FILE * f = fopen(path.c_str(), "wb");
     if (!f) return false;
     std::vector<uint8_t> pcm = to_pcm16(samples.data(), (int) samples.size());
-    uint32_t data_len = (uint32_t) pcm.size();
-    uint32_t riff = 36 + data_len;
-    auto w32 = [&](uint32_t v) { uint8_t b[4] = { (uint8_t) v, (uint8_t) (v >> 8), (uint8_t) (v >> 16), (uint8_t) (v >> 24) }; fwrite(b, 1, 4, f); };
-    auto w16 = [&](uint16_t v) { uint8_t b[2] = { (uint8_t) v, (uint8_t) (v >> 8) }; fwrite(b, 1, 2, f); };
-    fwrite("RIFF", 1, 4, f); w32(riff); fwrite("WAVE", 1, 4, f);
-    fwrite("fmt ", 1, 4, f); w32(16); w16(1); w16(1); w32(sr); w32(sr * 2); w16(2); w16(16);
-    fwrite("data", 1, 4, f); w32(data_len);
-    fwrite(pcm.data(), 1, pcm.size(), f);
+    std::vector<uint8_t> wav = wav_bytes(pcm, sr);
+    fwrite(wav.data(), 1, wav.size(), f);
     fclose(f);
     return true;
 }

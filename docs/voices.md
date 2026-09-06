@@ -46,7 +46,7 @@ wrote voices/harbour.breeze (67 frames, 5.36 s)
 Over HTTP, by adding a `name` to a registration:
 
 ```
-curl -X POST http://127.0.0.1:8137/v1/voices \
+curl -X POST "http://127.0.0.1:8137/v1/voices?token=my-secret" \
   -F "ref_audio=@reference.wav" \
   --form-string "ref_text=This is the exact transcript of the reference audio." \
   --form-string "name=harbour"
@@ -68,7 +68,7 @@ breeze-cli model.gguf --voice harbour --text "It is good to hear your voice agai
 ```
 
 ```
-curl -X POST http://127.0.0.1:8137/v1/audio/speech \
+curl -X POST "http://127.0.0.1:8137/v1/audio/speech?token=my-secret" \
   --form-string "input=It is good to hear your voice again." \
   --form-string "voice=harbour" \
   --form-string "response_format=wav" \

@@ -63,6 +63,16 @@ int run_server(const ServerOptions & opts) {
     auto mutex = std::make_shared<std::mutex>();
     const int sr = model.cfg.sample_rate;
 
+    // required on every request, as a ?token= query param, checked before any route runs
+    svr.set_pre_routing_handler([&](const httplib::Request & req, httplib::Response & res) {
+        if (req.get_param_value("token") != opts.token) {
+            res.status = 401;
+            res.set_content("{\"error\":\"missing or invalid token\"}", "application/json");
+            return httplib::Server::HandlerResponse::Handled;
+        }
+        return httplib::Server::HandlerResponse::Unhandled;
+    });
+
     VoiceStore store;
     store.load_dir(opts.voices_dir, model.cfg.num_codebooks);
     store.add_routes(svr, model, codec, *mutex, opts.voices_dir);
@@ -70,7 +80,7 @@ int run_server(const ServerOptions & opts) {
     WsServer ws;
     const int ws_port = opts.ws_port == 0 ? opts.port + 1 : opts.ws_port;
     if (ws_port > 0) {
-        const bool up = ws.start(opts.host, ws_port, [&](WsConn & c) {
+        const bool up = ws.start(opts.host, ws_port, opts.token, [&](WsConn & c) {
             ws_connection(c, model, codec, store, *mutex, opts.chunk_first, opts.chunk_max, opts.split_chars);
         });
         if (up) printf("websocket on ws://%s:%d\n", opts.host.c_str(), ws_port);

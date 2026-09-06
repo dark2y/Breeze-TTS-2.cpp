@@ -19,13 +19,14 @@ changes and interruption. It is documented in [websocket.md](websocket.md).
 ## Starting the server
 
 ```
-breeze-server <model.gguf> [--host H] [--port P] [--webui] [--cpu]
+breeze-server <model.gguf> --token T [--host H] [--port P] [--webui] [--cpu]
                            [--chunk-first N] [--chunk-max N] [--verbose]
                            [--voices-dir PATH] [--ws-port P] [--split-chars N]
 ```
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
+| `--token` | required | Shared secret every request must send back as a `?token=` query param. See [Authentication](#authentication). |
 | `--host` | `127.0.0.1` | Interface to bind. Use `0.0.0.0` to accept remote connections. |
 | `--port` | `8080` | TCP port. |
 | `--webui` | off | Also serve the browser UI at `/`. |
@@ -38,8 +39,17 @@ breeze-server <model.gguf> [--host H] [--port P] [--webui] [--cpu]
 | `--split-chars` | `600` | Default length long text is broken up at. `0` sends the whole thing through in one pass. A request can still override it. |
 
 ```
-breeze-server breeze-tts-2-q4_k.gguf --port 8137 --webui
+breeze-server breeze-tts-2-q4_k.gguf --port 8137 --webui --token my-secret
 ```
+
+## Authentication
+
+Every request, HTTP or WebSocket, must carry the `--token` value as a `token`
+query parameter, e.g. `POST /v1/audio/speech?token=my-secret` or
+`ws://host:port/?token=my-secret`. It is checked before any route runs, so a
+missing or wrong token gets a `401` for HTTP and the WebSocket handshake is
+refused outright rather than upgraded. Form fields are not checked this early,
+so the token must be in the URL, not the request body.
 
 ## Console output
 
@@ -59,9 +69,9 @@ rewrites it with the real figure. `fps` is frames generated per second against
 12.5 frames of audio per second, so the trailing number is the real time factor
 and anything above `1.00x` is faster than playback.
 
-There is no authentication and no rate limiting, on either the HTTP port or the
-WebSocket one. Do not expose them directly to the internet; put them behind a
-reverse proxy that handles both.
+There is no rate limiting on either the HTTP port or the WebSocket one, only the
+shared `--token`. Do not expose them directly to the internet; put them behind a
+reverse proxy that handles TLS and rate limiting.
 
 ## Streaming without stutter
 
@@ -79,7 +89,7 @@ Measure it against your own hardware rather than assuming:
 ```
 curl -s -o out.pcm -w "%{time_total}\n" \
   --form-string "input=<a sentence long enough to take several seconds>" \
-  http://127.0.0.1:8137/v1/audio/speech
+  "http://127.0.0.1:8137/v1/audio/speech?token=my-secret"
 ```
 
 Audio seconds are `bytes / 2 / 24000`, so the factor is that divided by
@@ -158,7 +168,7 @@ Setting both flags to the same value disables the ramp and streams a fixed size.
 Liveness probe. Returns once the model is loaded and ready.
 
 ```
-curl http://127.0.0.1:8137/health
+curl http://127.0.0.1:8137/health?token=my-secret
 ```
 
 ```json
@@ -256,7 +266,7 @@ empty field and the model ends up reading the multipart boundary out loud.
 Voice design:
 
 ```
-curl -X POST http://127.0.0.1:8137/v1/audio/speech \
+curl -X POST "http://127.0.0.1:8137/v1/audio/speech?token=my-secret" \
   --form-string "input=Welcome aboard. Your journey begins now." \
   --form-string "instruction=A warm, thoughtful young woman with a clear, calm delivery." \
   --form-string "cfg_scale=1" \
@@ -268,7 +278,7 @@ curl -X POST http://127.0.0.1:8137/v1/audio/speech \
 Voice clone:
 
 ```
-curl -X POST http://127.0.0.1:8137/v1/audio/speech \
+curl -X POST "http://127.0.0.1:8137/v1/audio/speech?token=my-secret" \
   --form-string "input=It is good to hear your voice again." \
   -F "ref_audio=@reference.wav" \
   --form-string "ref_text=This is the exact transcript of the reference audio." \
@@ -279,7 +289,7 @@ curl -X POST http://127.0.0.1:8137/v1/audio/speech \
 Voice direction, which is a clone plus an instruction:
 
 ```
-curl -X POST http://127.0.0.1:8137/v1/audio/speech \
+curl -X POST "http://127.0.0.1:8137/v1/audio/speech?token=my-secret" \
   --form-string "input=We need to discuss what happened last night." \
   --form-string "instruction=Speak slowly with a restrained, serious tone." \
   -F "ref_audio=@reference.wav" \
@@ -292,7 +302,7 @@ curl -X POST http://127.0.0.1:8137/v1/audio/speech \
 Play the raw stream straight out of `curl`:
 
 ```
-curl -sN -X POST http://127.0.0.1:8137/v1/audio/speech --form-string "input=Hello there." \
+curl -sN -X POST "http://127.0.0.1:8137/v1/audio/speech?token=my-secret" --form-string "input=Hello there." \
   | ffplay -f s16le -ar 24000 -ac 1 -nodisp -autoexit -
 ```
 
@@ -310,7 +320,7 @@ import urllib.request
 
 body, boundary = build_multipart({"input": "Streaming from python."})
 req = urllib.request.Request(
-    "http://127.0.0.1:8137/v1/audio/speech",
+    "http://127.0.0.1:8137/v1/audio/speech?token=my-secret",
     data=body,
     headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
 )

@@ -166,7 +166,7 @@ bool WsConn::recv(std::string & out, bool & binary) {
 
 WsServer::~WsServer() { stop(); }
 
-bool WsServer::start(const std::string & host, int port, Handler h) {
+bool WsServer::start(const std::string & host, int port, const std::string & token, Handler h) {
 #ifdef _WIN32
     WSADATA wsa;
     WSAStartup(MAKEWORD(2, 2), &wsa);
@@ -186,6 +186,7 @@ bool WsServer::start(const std::string & host, int port, Handler h) {
         return false;
     }
     m_listen = (uint64_t) s;
+    m_token = token;
     m_handler = std::move(h);
     m_running = true;
     m_thread = std::thread([this] { accept_loop(); });
@@ -198,8 +199,10 @@ void WsServer::stop() {
     if (m_thread.joinable()) m_thread.join();
 }
 
-// reads the upgrade request and answers it, leaving the socket talking websocket
-static bool handshake(SOCKET s) {
+// reads the upgrade request and answers it, leaving the socket talking websocket.
+// the request line's query string carries the auth token, since browsers won't let JS set
+// custom headers on a WebSocket handshake
+static bool handshake(SOCKET s, const std::string & token) {
     std::string req;
     char buf[1024];
     while (req.find("\r\n\r\n") == std::string::npos) {
@@ -207,6 +210,33 @@ static bool handshake(SOCKET s) {
         if (got <= 0 || req.size() > 16384) return false;
         req.append(buf, (size_t) got);
     }
+
+    const size_t line_end = req.find("\r\n");
+    // the request line is "GET /path?query HTTP/1.1", so the query ends at the space before
+    // the version, not at the end of the line
+    const size_t uri_end = line_end == std::string::npos ? std::string::npos : req.find(' ', 4);
+    const size_t qmark = req.find('?');
+    bool token_ok = false;
+    std::string got;
+    if (qmark != std::string::npos && uri_end != std::string::npos && qmark < uri_end) {
+        const std::string query = req.substr(qmark + 1, uri_end - qmark - 1);
+        const std::string pat = "token=";
+        const size_t at = query.find(pat);
+        if (at != std::string::npos) {
+            const size_t end = query.find('&', at);
+            got = query.substr(at + pat.size(),
+                end == std::string::npos ? std::string::npos : end - at - pat.size());
+            token_ok = !token.empty() && got == token;
+        }
+    }
+    if (!token_ok) {
+        fprintf(stderr, "ws: rejected, token mismatch (expected \"%s\", got \"%s\")\n",
+                token.c_str(), got.c_str());
+        const std::string res = "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n";
+        ::send(s, res.data(), (int) res.size(), 0);
+        return false;
+    }
+
     // header names are case insensitive, and browsers do not agree on the casing
     std::string lower = req;
     for (char & c : lower) c = (char) tolower((unsigned char) c);
@@ -235,7 +265,7 @@ void WsServer::accept_loop() {
         int yes = 1;
         setsockopt(c, IPPROTO_TCP, TCP_NODELAY, (const char *) &yes, sizeof yes);
         std::thread([this, c] {
-            if (handshake(c)) {
+            if (handshake(c, m_token)) {
                 WsConn conn((uint64_t) c);
                 m_handler(conn);
             } else {

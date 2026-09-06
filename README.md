@@ -201,17 +201,17 @@ See [docs/voice-conversion.md](docs/voice-conversion.md).
 ## Server
 
 ```
-build/breeze-server breeze-tts-2-q8_0.gguf --host 127.0.0.1 --port 8080 --webui
+build/breeze-server breeze-tts-2-q8_0.gguf --host 127.0.0.1 --port 8080 --webui --token my-secret
 ```
 
-Open http://localhost:8080/ for the web UI. The HTTP API streams mono 24 kHz signed 16 bit little
-endian PCM, matching the reference server.
+Open http://localhost:8080/?token=my-secret for the web UI. The HTTP API streams mono 24 kHz signed
+16 bit little endian PCM, matching the reference server.
 
 ```
-curl -X POST http://127.0.0.1:8080/v1/audio/speech \
-  --form-string "text=(clears throat) We need to talk." \
+curl -X POST "http://127.0.0.1:8080/v1/audio/speech?token=my-secret" \
+  --form-string "input=(clears throat) We need to talk." \
   --form-string "instruction=Speak slowly with a restrained, serious tone." \
-  --form-string "voice_id=narrator" \
+  --form-string "voice=narrator" \
   --output out.pcm
 ```
 
@@ -222,8 +222,8 @@ A WebSocket server also comes up on the HTTP port plus one. It takes text increm
 back as it is produced, and supports changing the delivery instruction or cancelling mid sentence,
 which is what you want when driving it from a chat model. See [docs/websocket.md](docs/websocket.md).
 
-> **Neither port has authentication or rate limiting.** Keep them bound to `127.0.0.1` unless something
-> in front of them is handling that.
+> **Neither port has rate limiting**, only the shared `--token`. Keep them bound to `127.0.0.1` unless
+> something in front of them is handling that.
 
 ## Bindings
 

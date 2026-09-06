@@ -8,10 +8,12 @@ using namespace breeze;
 
 int main(int argc, char ** argv) {
     if (argc < 2 || !strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")) {
-        printf("usage: breeze-server <model.gguf> [--host H] [--port P] [--webui] [--cpu]\n");
+        printf("usage: breeze-server <model.gguf> --token T [--host H] [--port P] [--webui] [--cpu]\n");
         printf("                     [--chunk-first N] [--chunk-max N] [--verbose]\n");
         printf("                     [--voices-dir PATH] [--ws-port P] [--split-chars N]\n");
         printf("\n");
+        printf("  --token        shared secret required on every request, as a ?token= query\n");
+        printf("                 param over http or in the websocket url. required, no default\n");
         printf("  --chunk-first  frames in the first streamed chunk, lower starts sooner (default 4)\n");
         printf("  --chunk-max    frames the chunk ramps up to, higher is more efficient (default 25)\n");
         printf("                 set both the same to stream a fixed chunk size\n");
@@ -37,7 +39,12 @@ int main(int argc, char ** argv) {
         else if (a == "--chunk-first" && i + 1 < argc) opts.chunk_first = atoi(argv[++i]);
         else if (a == "--chunk-max" && i + 1 < argc) opts.chunk_max = atoi(argv[++i]);
         else if (a == "--split-chars" && i + 1 < argc) opts.split_chars = atoi(argv[++i]);
+        else if (a == "--token" && i + 1 < argc) opts.token = argv[++i];
         else { fprintf(stderr, "unknown arg: %s\n", a.c_str()); return 1; }
+    }
+    if (opts.token.empty()) {
+        fprintf(stderr, "--token is required\n");
+        return 1;
     }
     if (opts.split_chars < 0) opts.split_chars = 0;
     if (opts.chunk_first < 1 || opts.chunk_max < 1) {

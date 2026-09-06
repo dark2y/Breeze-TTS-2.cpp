@@ -10,6 +10,25 @@ const stopBtn = document.getElementById("stop");
 
 let wsPort = 0;
 
+// only ever set from the input and localStorage, never the url bar, so the token can't leak
+// through browser history, referrer headers or shared links
+const tokenInput = document.getElementById("token");
+let token = localStorage.getItem("breeze_token") || "";
+tokenInput.value = token;
+
+function withToken(url) {
+  if (!token) return url;
+  return url + (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token);
+}
+
+tokenInput.addEventListener("change", () => {
+  token = tokenInput.value.trim();
+  if (token) localStorage.setItem("breeze_token", token);
+  else localStorage.removeItem("breeze_token");
+  loadHealth();
+  loadVoices();
+});
+
 function syncBuffer() {
   bufferOut.textContent = Number(bufferInput.value).toFixed(2) + "s";
   bufferInput.disabled = !streamToggle.checked;
@@ -48,7 +67,7 @@ function syncVoice(panel) {
 async function loadVoices() {
   let list = [];
   try {
-    const res = await fetch("/v1/voices");
+    const res = await fetch(withToken("/v1/voices"));
     if (res.ok) list = await res.json();
   } catch (e) { return; }
   document.querySelectorAll("select[data-f=voice_id]").forEach(sel => {
@@ -85,7 +104,7 @@ async function saveVoice(panel) {
     form.append("name", name);
     form.append("ref_audio", f.ref_audio.files[0]);
     form.append("ref_text", f.ref_text.value);
-    const res = await fetch("/v1/voices", { method: "POST", body: form });
+    const res = await fetch(withToken("/v1/voices"), { method: "POST", body: form });
     const body = await res.json();
     if (!res.ok) {
       statusEl.textContent = res.status === 409 ? "BUSY - ONE REQUEST AT A TIME"
@@ -241,7 +260,7 @@ async function resolveVoice(f) {
   const form = new FormData();
   form.append("ref_audio", f.ref_audio.files[0]);
   form.append("ref_text", f.ref_text ? f.ref_text.value || "" : "");
-  const r = await fetch("/v1/voices", { method: "POST", body: form });
+  const r = await fetch(withToken("/v1/voices"), { method: "POST", body: form });
   if (!r.ok) throw new Error("could not encode the reference");
   return (await r.json()).id;
 }
@@ -260,7 +279,7 @@ function wsGenerate(panel, tabName) {
   return resolveVoice(f).then(voice => new Promise(resolve => {
     const url = (location.protocol === "https:" ? "wss://" : "ws://") +
                 location.hostname + "/ws";
-    const sock = new WebSocket(url);
+    const sock = new WebSocket(withToken(url));
     sock.binaryType = "arraybuffer";
     liveSocket = sock;
     btn.disabled = true;
@@ -358,7 +377,7 @@ async function generate(panel, tabName) {
   player.removeAttribute("src");
 
   try {
-    const res = await fetch("/v1/audio/speech", { method: "POST", body: form });
+    const res = await fetch(withToken("/v1/audio/speech"), { method: "POST", body: form });
     if (!res.ok) {
       statusEl.textContent = res.status === 409 ? "BUSY - ONE REQUEST AT A TIME" : "ERROR " + res.status;
       btn.disabled = false;
@@ -420,7 +439,7 @@ async function convert(panel) {
   player.removeAttribute("src");
 
   try {
-    const res = await fetch("/v1/audio/convert", { method: "POST", body: form });
+    const res = await fetch(withToken("/v1/audio/convert"), { method: "POST", body: form });
     if (!res.ok) {
       statusEl.textContent = res.status === 409 ? "BUSY - ONE REQUEST AT A TIME" : "ERROR " + res.status;
       btn.disabled = false;
@@ -461,7 +480,7 @@ stopBtn.addEventListener("click", () => {
 
 async function loadHealth() {
   try {
-    const r = await fetch("/health");
+    const r = await fetch(withToken("/health"));
     if (r.ok) wsPort = (await r.json()).ws_port || 0;
   } catch (e) { wsPort = 0; }
 }

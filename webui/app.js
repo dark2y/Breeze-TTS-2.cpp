@@ -10,15 +10,24 @@ const stopBtn = document.getElementById("stop");
 
 let wsPort = 0;
 
-// the server needed this in the url just to serve this page, so it is already there on first load.
-// stashing it means a bookmarked bare url can still be recovered without asking again
-const token = new URLSearchParams(location.search).get("token") || localStorage.getItem("breeze_token") || "";
-if (token) localStorage.setItem("breeze_token", token);
+// only ever set from the input and localStorage, never the url bar, so the token can't leak
+// through browser history, referrer headers or shared links
+const tokenInput = document.getElementById("token");
+let token = localStorage.getItem("breeze_token") || "";
+tokenInput.value = token;
 
 function withToken(url) {
   if (!token) return url;
   return url + (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token);
 }
+
+tokenInput.addEventListener("change", () => {
+  token = tokenInput.value.trim();
+  if (token) localStorage.setItem("breeze_token", token);
+  else localStorage.removeItem("breeze_token");
+  loadHealth();
+  loadVoices();
+});
 
 function syncBuffer() {
   bufferOut.textContent = Number(bufferInput.value).toFixed(2) + "s";

@@ -29,6 +29,9 @@ header {
 header h1 { margin: 0; font-size: 28px; letter-spacing: 2px; }
 header p { margin: 8px 0 0; color: var(--dim); }
 
+.tokenrow { margin: 16px 0 0; padding-top: 16px; border-top: 2px solid var(--line); }
+.tokenrow textarea { margin-top: 6px; resize: vertical; }
+
 main, nav.tabs { max-width: 900px; margin-inline: auto; }
 
 nav.tabs { display: flex; gap: 0; margin-bottom: 0; }
@@ -52,7 +55,7 @@ nav.tabs { display: flex; gap: 0; margin-bottom: 0; }
 
 label { display: block; margin-bottom: 16px; font-size: 12px; letter-spacing: 1px; color: var(--dim); }
 
-textarea, input[type="number"], input[type="file"], input[type="text"], select {
+textarea, input[type="number"], input[type="file"], input[type="text"], input[type="password"], select {
   display: block;
   width: 100%;
   margin-top: 6px;

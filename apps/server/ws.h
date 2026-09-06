@@ -42,13 +42,14 @@ public:
     using Handler = std::function<void(WsConn &)>;
 
     ~WsServer();
-    bool start(const std::string & host, int port, Handler h);
+    bool start(const std::string & host, int port, const std::string & token, Handler h);
     void stop();
 
 private:
     void accept_loop();
 
     uint64_t m_listen = 0;
+    std::string m_token;
     Handler m_handler;
     std::thread m_thread;
     std::atomic<bool> m_running{false};

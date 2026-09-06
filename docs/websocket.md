@@ -24,6 +24,16 @@ without being told:
 ws://127.0.0.1:8081
 ```
 
+The server's `--token` value is required on every connection, as a `token`
+query parameter on the connection URL:
+
+```
+ws://127.0.0.1:8081/?token=my-secret
+```
+
+A missing or wrong token gets the handshake refused with a `401` instead of an
+upgrade to `101 Switching Protocols`.
+
 **Text frames are JSON control messages, binary frames are audio.** WebSocket
 already distinguishes the two at the framing layer, so audio needs no envelope
 and no base64. The audio is headerless signed 16 bit little endian mono PCM at
@@ -127,10 +137,10 @@ Each connection reads and generates on separate threads, which is what lets
 
 ## Security
 
-There is no authentication, no origin check and no rate limit on the socket. It
-binds to `--host`, which defaults to `127.0.0.1`. Binding it to `0.0.0.0` hands
-anyone on the network unrestricted use of the GPU. Put it behind a reverse proxy
-that terminates TLS and handles auth before exposing it.
+There is no origin check and no rate limit on the socket, only the shared
+`--token`. It binds to `--host`, which defaults to `127.0.0.1`. Binding it to
+`0.0.0.0` hands anyone with the token unrestricted use of the GPU. Put it behind
+a reverse proxy that terminates TLS before exposing it.
 
 ## Client sketch
 
@@ -138,7 +148,7 @@ that terminates TLS and handles auth before exposing it.
 import asyncio, json, websockets
 
 async def speak(lines):
-    async with websockets.connect("ws://127.0.0.1:8081", max_size=None) as ws:
+    async with websockets.connect("ws://127.0.0.1:8081/?token=my-secret", max_size=None) as ws:
         await ws.recv()  # ready
         await ws.send(json.dumps({"type": "start", "voice_id": "harbour", "seed": 7}))
 

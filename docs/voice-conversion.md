@@ -86,7 +86,7 @@ start. Headers are the same: `X-Sample-Rate` and `X-Sample-Format`. The body is
 raw s16le PCM by default, or a complete WAV file when `response_format=wav`.
 
 ```
-curl -X POST http://127.0.0.1:8137/v1/audio/convert \
+curl -X POST "http://127.0.0.1:8137/v1/audio/convert?token=my-secret" \
   -F "source=@recording.wav" \
   --form-string "voice=harbour" \
   --form-string "response_format=wav" \

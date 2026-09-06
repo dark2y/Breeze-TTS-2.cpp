@@ -16,6 +16,7 @@ struct ServerOptions {
     int chunk_first = 4;
     int chunk_max = 25;
     int split_chars = 600; // 0 keeps long text in a single pass
+    std::string token; // required shared secret, checked as a ?token= query param on every request
 };
 
 int run_server(const ServerOptions & opts);

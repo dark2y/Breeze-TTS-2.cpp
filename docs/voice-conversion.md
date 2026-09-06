@@ -78,18 +78,18 @@ Same operation over HTTP. Takes `multipart/form-data`.
 | `cfg_scale` | float | `1.0` | Guidance toward the target voice. |
 | `keep_acoustic` | int | `0` | Acoustic codebooks kept from the source. |
 | `seed` | int | `42` | RNG seed. |
-| `format` | string | `pcm` | `pcm` for headerless PCM, or `wav` for a WAV file. |
+| `response_format` | string | `pcm` | `pcm` for headerless PCM, or `wav` for a WAV file. |
 
 Unlike `/v1/audio/speech` this returns the whole clip in one response rather than
 streaming, because conversion needs the entire source encoded before it can
 start. Headers are the same: `X-Sample-Rate` and `X-Sample-Format`. The body is
-raw s16le PCM by default, or a complete WAV file when `format=wav`.
+raw s16le PCM by default, or a complete WAV file when `response_format=wav`.
 
 ```
 curl -X POST http://127.0.0.1:8137/v1/audio/convert \
   -F "source=@recording.wav" \
   --form-string "voice=harbour" \
-  --form-string "format=wav" \
+  --form-string "response_format=wav" \
   -o converted.wav
 ```
 

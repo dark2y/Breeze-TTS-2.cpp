@@ -120,10 +120,10 @@ int run_server(const ServerOptions & opts) {
             res.set_content("{\"error\":\"text is required\"}", "application/json");
             return;
         }
-        const std::string format = field(req, "format", "pcm");
+        const std::string format = field(req, "response_format", "pcm");
         if (format != "pcm" && format != "wav") {
             res.status = 400;
-            res.set_content("{\"error\":\"format must be pcm or wav\"}", "application/json");
+            res.set_content("{\"error\":\"response_format must be pcm or wav\"}", "application/json");
             return;
         }
 
@@ -233,10 +233,10 @@ int run_server(const ServerOptions & opts) {
             res.set_content("{\"error\":\"ref_text is required\"}", "application/json");
             return;
         }
-        const std::string format = field(req, "format", "pcm");
+        const std::string format = field(req, "response_format", "pcm");
         if (format != "pcm" && format != "wav") {
             res.status = 400;
-            res.set_content("{\"error\":\"format must be pcm or wav\"}", "application/json");
+            res.set_content("{\"error\":\"response_format must be pcm or wav\"}", "application/json");
             return;
         }
 

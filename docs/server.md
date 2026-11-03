@@ -42,6 +42,45 @@ breeze-server <model.gguf> --token T [--host H] [--port P] [--webui] [--cpu]
 breeze-server breeze-tts-2-q4_k.gguf --port 8137 --webui --token my-secret
 ```
 
+## Docker (CPU)
+
+GitHub Actions builds the CPU image for `linux/amd64` and publishes it to
+`ghcr.io/dark2y/breeze-tts-2.cpp:latest` on pushes to `main`. Version tags and
+commit SHA tags are also published. Package visibility is managed separately on
+GitHub; authentication may be required to pull it.
+
+To build locally, initialize the pinned ggml submodule first; it is needed in the build
+context. The image is CPU-only (no CUDA or Vulkan GPU acceleration), embeds the
+WebUI, and does not include model weights or saved voices. It builds with
+`GGML_NATIVE=OFF` so an image built on a GitHub Actions runner does not require
+that runner's native CPU instruction set; the image still requires a compatible
+CPU architecture.
+
+```sh
+git submodule update --init --recursive
+docker build -t breeze-server:cpu .
+mkdir -p /shared/breeze/voices
+# Make the voices directory writable by container UID 10001 if saving voices.
+docker run --rm --name breeze-server \
+  -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 \
+  --mount type=bind,src=/shared/breeze/model.gguf,dst=/model.gguf,readonly \
+  --mount type=bind,src=/shared/breeze/voices,dst=/data/voices \
+  breeze-server:cpu /model.gguf --host 0.0.0.0 --port 8080 \
+  --voices-dir /data/voices --webui --token 'replace-with-a-secret'
+curl 'http://127.0.0.1:8080/health?token=replace-with-a-secret'
+```
+
+Replace `/shared/breeze/model.gguf` with the absolute path to a downloaded GGUF
+model; see [models.md](models.md). The token is mandatory and is visible in
+container configuration and URLs; use a strong secret and protect logs. The
+container listens on all interfaces, but these port mappings limit host access
+to loopback. The WebSocket listener defaults to HTTP port + 1; publish the
+matching port if changed, or use `--ws-port -1` to disable it. For remote access,
+use a TLS-terminating, rate-limiting proxy; neither listener provides TLS or
+rate limiting. The voices mount persists saved voices and must be writable by
+UID 10001; otherwise omit it if persistence is not needed. Arguments after the
+image name replace the default help command and are passed to `breeze-server`.
+
 ## Authentication
 
 Every request, HTTP or WebSocket, must carry the `--token` value as a `token`

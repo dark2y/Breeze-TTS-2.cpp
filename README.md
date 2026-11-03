@@ -200,7 +200,7 @@ See [docs/voice-conversion.md](docs/voice-conversion.md).
 
 ## Server
 
-For a CPU-only container build and run example, see [Docker](docs/server.md#docker-cpu).
+For CPU and Vulkan GPU container builds and run examples, see [Docker](docs/server.md#docker-cpu) and [Docker (Vulkan)](docs/server.md#docker-vulkan).
 
 ```
 build/breeze-server breeze-tts-2-q8_0.gguf --host 127.0.0.1 --port 8080 --webui --token my-secret

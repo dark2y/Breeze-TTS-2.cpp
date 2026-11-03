@@ -81,6 +81,61 @@ rate limiting. The voices mount persists saved voices and must be writable by
 UID 10001; otherwise omit it if persistence is not needed. Arguments after the
 image name replace the default help command and are passed to `breeze-server`.
 
+## Docker (Vulkan)
+
+GitHub Actions publishes the GPU image as `ghcr.io/dark2y/breeze-tts-2.cpp:vulkan`
+(the CPU image remains `:latest`). To build locally, initialize the pinned ggml
+submodule first. The image contains the Vulkan loader, Mesa Vulkan
+ICDs for compatible AMD/Intel GPUs, and `vulkaninfo`, but no model weights. The
+host needs a working Vulkan-capable GPU, compatible kernel and userspace drivers,
+and access to its device node. This is a Linux container example:
+
+```sh
+git submodule update --init --recursive
+docker build -f Dockerfile.vulkan -t breeze-server:vulkan .
+# Choose the actual render node and its numeric group on the Docker host.
+ls -l /dev/dri/renderD*
+RENDER=/dev/dri/renderD128
+RENDER_GID=$(stat -c '%g' "$RENDER")
+# Check the device name and driver before starting the server.
+docker run --rm --network public --device "$RENDER:$RENDER" \
+  --group-add "$RENDER_GID" --entrypoint vulkaninfo \
+  breeze-server:vulkan --summary
+mkdir -p /shared/breeze/voices
+# UID 10001 must be able to write the voices directory.
+docker run --rm --name breeze-server --network public \
+  --device "$RENDER:$RENDER" --group-add "$RENDER_GID" \
+  -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 \
+  --mount type=bind,src=/shared/breeze/model.gguf,dst=/model.gguf,readonly \
+  --mount type=bind,src=/shared/breeze/voices,dst=/data/voices \
+  breeze-server:vulkan /model.gguf --host 0.0.0.0 --port 8080 \
+  --voices-dir /data/voices --webui --token 'replace-with-a-secret'
+```
+
+Replace paths, node, token, and network as appropriate. The `public` Docker
+network must already exist; it does not by itself guarantee external access.
+The device and its numeric group must be available on the Docker host, not
+merely the client. Container UID 10001 needs permission to access the render
+node. On a rootless or remote Docker daemon additional device permissions may be
+required. See the CPU example above for model, voice persistence, ports and
+security details. `--cpu` forces CPU instead of Vulkan.
+
+**Verify actual acceleration:** `vulkaninfo --summary` may list Mesa's
+`llvmpipe` software Vulkan device even without a GPU. A successful container
+start, Vulkan enumeration, or inference alone does not prove GPU usage. Check the
+reported physical device and server backend logs, then perform inference while
+monitoring GPU utilization. A driver or device lacking features required by the
+pinned ggml Vulkan backend may fail or fall back; test the actual hardware.
+
+NVIDIA requires its compatible host driver and NVIDIA Container Toolkit, including
+Vulkan/graphics driver libraries and ICD injection; passing a device alone or
+installing the Vulkan loader is insufficient. Configure the toolkit for Docker,
+then use `--gpus all -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics`
+instead of the Mesa render-node options, and check `vulkaninfo --summary` and
+server logs. Driver/toolkit versions and hardware support vary; this image does
+not bundle NVIDIA's proprietary ICD, and `nvidia-smi` alone does not establish
+Vulkan functionality. Mesa software devices can still appear alongside a GPU.
+
 ## Authentication
 
 Every request, HTTP or WebSocket, must carry the `--token` value as a `token`

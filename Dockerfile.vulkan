@@ -1,0 +1,25 @@
+FROM debian:trixie-slim AS build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake ca-certificates libvulkan-dev glslc spirv-headers \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY . .
+RUN cmake -S . -B /build -DCMAKE_BUILD_TYPE=Release \
+    -DBREEZE_VULKAN=ON -DBREEZE_CUDA=OFF -DBREEZE_BUILD_CLI=OFF \
+    -DBREEZE_BUILD_SHARED=OFF -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF \
+    && cmake --build /build --target breeze-server --parallel 2
+
+FROM debian:trixie-slim
+# Mesa supplies AMD/Intel ICDs and may also expose the llvmpipe software device.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 libstdc++6 libvulkan1 mesa-vulkan-drivers vulkan-tools \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --create-home breeze \
+    && mkdir -p /data/voices && chown -R breeze:breeze /data
+COPY --from=build /build/breeze-server /usr/local/bin/breeze-server
+USER breeze
+WORKDIR /data
+EXPOSE 8080 8081
+ENTRYPOINT ["breeze-server"]
+CMD ["--help"]
